@@ -1087,6 +1087,32 @@ class NetworkScanner:
             self.log_message(f"Warning: Failed to cleanup session directory: {e}")
 
 
+def check_root_privileges():
+    """Check if running with root privileges and prompt user for confirmation if not."""
+    if os.geteuid() == 0:
+        return True
+    
+    print("WARNING: Not running with root privileges")
+    print("This will have the following limitations:")
+    print("  • No UDP port scanning (requires raw socket access)")
+    print("  • TCP scans will use -sT (Connect) instead of -sS (SYN stealth)")
+    print("  • Slower scanning performance")
+    print()
+    print("For full functionality, run with: sudo python3 infra-scan.py [options]")
+    print()
+    
+    while True:
+        response = input("Continue with limited functionality? [y/N]: ").strip().lower()
+        if response in ['y', 'yes']:
+            print("Proceeding with limited scanning capabilities...")
+            return False
+        elif response in ['n', 'no', '']:
+            print("Exiting. Run with sudo for full functionality.")
+            sys.exit(0)
+        else:
+            print("Please enter 'y' for yes or 'n' for no.")
+
+
 def main():
     """Main function to parse arguments and run the scanner."""
     # --- 1. Argument Parsing ---
@@ -1096,22 +1122,22 @@ def main():
         epilog="""
 Examples:
   # Scan specific IP ranges
-  python3 parallel_scan_v2_sonnet.py -t 192.168.1.0/24 10.0.0.0/24
+  python3 infra-scan.py -t 192.168.1.0/24 10.0.0.0/24
   
   # Scan from file
-  python3 parallel_scan_v2_sonnet.py -f targets.txt
+  python3 infra-scan.py -f targets.txt
   
   # Create a session and run with root for faster scans
-  sudo python3 parallel_scan_v2_sonnet.py --session-id myscan -t 192.168.1.0/24
+  sudo python3 infra-scan.py --session-id myscan -t 192.168.1.0/24
   
   # Resume a previous session
-  python3 parallel_scan_v2_sonnet.py --resume myscan
+  python3 infra-scan.py --resume myscan
   
   # Enable service detection and specify an output directory
-  python3 parallel_scan_v2_sonnet.py --version -t 192.168.1.0/24 -o my_scan_results
+  python3 infra-scan.py --version -t 192.168.1.0/24 -o my_scan_results
   
   # Generate Excel files along with CSV results
-  python3 parallel_scan_v2_sonnet.py --excel -t 192.168.1.0/24
+  python3 infra-scan.py --excel -t 192.168.1.0/24
         """
     )
     
@@ -1130,8 +1156,9 @@ Examples:
     
     # --- 2. Handle Special Modes (List Sessions) ---
     if args.list_sessions:
-        if os.path.exists(self.SESSIONS_DIR):
-            sessions = [d for d in os.listdir(self.SESSIONS_DIR) if os.path.isdir(os.path.join(self.SESSIONS_DIR, d))]
+        sessions_dir = 'sessions'
+        if os.path.exists(sessions_dir):
+            sessions = [d for d in os.listdir(sessions_dir) if os.path.isdir(os.path.join(sessions_dir, d))]
             if sessions:
                 print("Available sessions:")
                 for session_id in sorted(sessions):
@@ -1142,6 +1169,8 @@ Examples:
             print("No sessions directory found")
         sys.exit(0)
     
+    # --- 2.5. Check Root Privileges ---
+    check_root_privileges()
     
     # --- 3. Initialize Scanner ---
     # Warn about Excel dependencies if requested but not available
